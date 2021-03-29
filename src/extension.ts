@@ -14,7 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "github-action-debugger" is now active!');
 
 	let disposable = vscode.commands.registerCommand('github-action-debugger.welcome', () => {
-
+		console.log('inside welcome!');
 	});
 
 	context.subscriptions.push(disposable);
@@ -22,40 +22,14 @@ export function activate(context: vscode.ExtensionContext) {
 	let runActionDisposable = vscode.commands.registerCommand('github-action-debugger.runAction', ( jobName ) => {
 		vscode.window.showInformationMessage('About to run an action');
 
-		const writeEmitter = new vscode.EventEmitter<string>();
-		let line = '';
-		const pty = {
-			onDidWrite: writeEmitter.event,
-			open: () => writeEmitter.fire('Type and press enter to echo the text\r\n\r\n'),
-			close: () => { /* noop*/ },
-			handleInput: (data: string) => {
-				if (data === '\r') { // Enter
-					writeEmitter.fire(`\r\necho: "this!"\r\n\n`);
-					line = '';
-					return;
-				}
-				if (data === '\x7f') { // Backspace
-					if (line.length === 0) {
-						return;
-					}
-					line = line.substr(0, line.length - 1);
-					// Move cursor backward
-					writeEmitter.fire('\x1b[D');
-					// Delete character
-					writeEmitter.fire('\x1b[P');
-					return;
-				}
-				line += data;
-				writeEmitter.fire(data);
-			}
-		};
+		const command = 'all' === jobName
+			? 'act'
+			: `act -j ${ jobName }`;
+
 		const terminal = (<any>vscode.window).createTerminal('GitHub action test');
 		terminal.sendText(`echo "Running the GitHub action job ${ jobName }"`);
-		terminal.sendText(`act -j ${ jobName }`);
+		terminal.sendText(command);
 		terminal.show();
-		writeEmitter.event(event => {
-			const i = event;
-		});
 	});
 
 	context.subscriptions.push(runActionDisposable);
