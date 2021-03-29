@@ -1,21 +1,53 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import * as yaml from 'js-yaml';
+import { Dependency } from './Dependency';
 
 export class GitHubActionsProvider implements vscode.TreeDataProvider<Dependency> {
+  private _onDidChangeTreeData: vscode.EventEmitter<Dependency | undefined | void> = new vscode.EventEmitter<Dependency | undefined | void>();
+
   constructor(private workspace: typeof vscode.workspace) {}
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire();
+  }
 
   getTreeItem(element: Dependency): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: Dependency): Thenable<Dependency[]> {
-    const process = spawn('act', ['-l'] );
-    process.stdout.on('data', (data) => {
-      console.log(`process result is: \n${data}`);
-    });
+  async getChildren(element?: Dependency): Promise<Dependency[]> {
+    const ymlFiles = await this.workspace.findFiles('.github/workflows/*.yml');
+    const singleFile = yaml.load(fs.readFileSync(ymlFiles[0].fsPath, 'utf8'));
+    return Promise.resolve(
+      Object.keys(singleFile.jobs).reduce(
+        ( accumulator, jobName ) => {
+          return [
+            ...accumulator,
+            new Dependency(
+              jobName,
+              vscode.TreeItemCollapsibleState.None
+            )
+          ];
+        },
+        []
+      )
+    );
 
+    /*
+    return Promise.resolve([
+      new Dependency(
+        'first',
+        '0.1.0',
+        vscode.TreeItemCollapsibleState.None
+      ),
+      new Dependency(
+        'second',
+        '2.23.32',
+        vscode.TreeItemCollapsibleState.None
+      ),
+    ]);
     if (!this.workspace.workspaceFile || typeof this.workspace.workspaceFile !== 'string') {
       vscode.window.showInformationMessage('No dependency in empty workspace');
       return Promise.resolve([]);
@@ -36,6 +68,10 @@ export class GitHubActionsProvider implements vscode.TreeDataProvider<Dependency
         return Promise.resolve([]);
       }
     }
+    const result = fs.readdir( path.join(this.workspace.workspaceFile, '.github', 'workflows' ), response => {
+      const i = response;
+    } );
+    */
   }
 
   /**
@@ -53,24 +89,18 @@ export class GitHubActionsProvider implements vscode.TreeDataProvider<Dependency
           return new Dependency(
             moduleName,
             version,
-            vscode.TreeItemCollapsibleState.Collapsed
+            vscode.TreeItemCollapsibleState.None
           );
         } else {
           return new Dependency(moduleName, version, vscode.TreeItemCollapsibleState.None);
         }
       };
 
-      const deps = packageJson.dependencies
+      return packageJson.dependencies
         ? Object.keys(packageJson.dependencies).map(dep =>
             toDep(dep, packageJson.dependencies[dep])
           )
         : [];
-      const devDeps = packageJson.devDependencies
-        ? Object.keys(packageJson.devDependencies).map(dep =>
-            toDep(dep, packageJson.devDependencies[dep])
-          )
-        : [];
-      return deps.concat(devDeps);
     } else {
       return [];
     }
@@ -84,21 +114,4 @@ export class GitHubActionsProvider implements vscode.TreeDataProvider<Dependency
     }
     return true;
   }
-}
-
-class Dependency extends vscode.TreeItem {
-  constructor(
-    public readonly label: string,
-    private version: string,
-    public readonly collapsibleState: vscode.TreeItemCollapsibleState
-  ) {
-    super(label, collapsibleState);
-    this.tooltip = `${this.label}-${this.version}`;
-    this.description = this.version;
-  }
-
-  iconPath = {
-    light: path.join(__filename, '..', '..', 'resources', 'light', 'folder.svg'),
-    dark: path.join(__filename, '..', '..', 'resources', 'dark', 'folder.svg')
-  };
 }
